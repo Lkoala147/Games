@@ -1,0 +1,266 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tres en Raya</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --panel: #ffffff;
+      --line: #d7dce8;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --x: #0ea5e9;
+      --o: #ef4444;
+      --accent: #111827;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #ffffff 0%, var(--bg) 70%);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--text);
+      padding: 16px;
+    }
+    .app {
+      width: min(520px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.08);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.4rem, 3vw, 2rem);
+      text-align: center;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .status {
+      text-align: center;
+      font-weight: 700;
+      min-height: 1.4em;
+      margin-bottom: 10px;
+    }
+    select, button {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-weight: 600;
+      background: #fff;
+    }
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    button.alt {
+      background: #fff;
+      color: var(--text);
+      border-color: var(--line);
+    }
+    .board {
+      width: min(360px, 90vw);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .cell {
+      aspect-ratio: 1 / 1;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      font-size: clamp(2.2rem, 8vw, 3.4rem);
+      font-weight: 800;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .cell:disabled { cursor: not-allowed; opacity: 0.9; }
+    .cell.x { color: var(--x); }
+    .cell.o { color: var(--o); }
+    .score {
+      margin-top: 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <h1>Tres en Raya</h1>
+
+    <div class="row">
+      <label for="mode">Modo:</label>
+      <select id="mode">
+        <option value="pvp">Jugador vs Jugador</option>
+        <option value="cpu">Jugador vs IA</option>
+      </select>
+      <button id="newBtn" type="button">Nueva partida</button>
+      <button id="resetScoreBtn" class="alt" type="button">Reset marcador</button>
+    </div>
+
+    <p id="status" class="status">Turno de X</p>
+
+    <section id="board" class="board" aria-label="Tablero tres en raya"></section>
+
+    <p id="score" class="score">X: 0 · O: 0 · Empates: 0</p>
+  </main>
+
+  <script>
+    const boardEl = document.getElementById("board");
+    const statusEl = document.getElementById("status");
+    const scoreEl = document.getElementById("score");
+    const modeEl = document.getElementById("mode");
+    const newBtn = document.getElementById("newBtn");
+    const resetScoreBtn = document.getElementById("resetScoreBtn");
+
+    let cells = Array(9).fill(null);
+    let turn = "X";
+    let gameOver = false;
+    const score = { X: 0, O: 0, D: 0 };
+
+    const WINS = [
+      [0,1,2], [3,4,5], [6,7,8],
+      [0,3,6], [1,4,7], [2,5,8],
+      [0,4,8], [2,4,6]
+    ];
+
+    function winnerOf(c) {
+      for (const [a,b,d] of WINS) {
+        if (c[a] && c[a] === c[b] && c[b] === c[d]) return c[a];
+      }
+      if (c.every(Boolean)) return "D";
+      return null;
+    }
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function renderScore() {
+      scoreEl.textContent = `X: ${score.X} · O: ${score.O} · Empates: ${score.D}`;
+    }
+
+    function createCell(i) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cell";
+      btn.textContent = cells[i] || "";
+      if (cells[i]) btn.classList.add(cells[i].toLowerCase());
+      btn.disabled = gameOver || Boolean(cells[i]);
+      btn.addEventListener("click", () => playMove(i));
+      return btn;
+    }
+
+    function renderBoard() {
+      boardEl.innerHTML = "";
+      for (let i = 0; i < 9; i++) boardEl.appendChild(createCell(i));
+    }
+
+    function endGame(result) {
+      gameOver = true;
+      if (result === "D") {
+        score.D++;
+        setStatus("Empate");
+      } else {
+        score[result]++;
+        setStatus(`Gana ${result}`);
+      }
+      renderScore();
+      renderBoard();
+      setTimeout(() => {
+        newGame();
+      }, 1100);
+    }
+
+    function aiMove() {
+      if (gameOver || modeEl.value !== "cpu" || turn !== "O") return;
+
+      // IA simple: ganar > bloquear > centro > esquina > aleatorio
+      const tryLine = (mark) => {
+        for (const [a,b,c] of WINS) {
+          const line = [cells[a], cells[b], cells[c]];
+          const countMark = line.filter((x) => x === mark).length;
+          const empties = [a,b,c].filter((idx) => !cells[idx]);
+          if (countMark === 2 && empties.length === 1) return empties[0];
+        }
+        return -1;
+      };
+
+      let idx = tryLine("O");
+      if (idx < 0) idx = tryLine("X");
+      if (idx < 0 && !cells[4]) idx = 4;
+      if (idx < 0) {
+        const corners = [0,2,6,8].filter((i) => !cells[i]);
+        if (corners.length) idx = corners[Math.floor(Math.random() * corners.length)];
+      }
+      if (idx < 0) {
+        const free = cells.map((v,i) => (v ? -1 : i)).filter((i) => i >= 0);
+        if (free.length) idx = free[Math.floor(Math.random() * free.length)];
+      }
+
+      if (idx >= 0) playMove(idx);
+    }
+
+    function playMove(i) {
+      if (gameOver || cells[i]) return;
+      cells[i] = turn;
+
+      const result = winnerOf(cells);
+      if (result) {
+        endGame(result);
+        return;
+      }
+
+      turn = turn === "X" ? "O" : "X";
+      setStatus(`Turno de ${turn}`);
+      renderBoard();
+
+      if (modeEl.value === "cpu" && turn === "O") {
+        setTimeout(aiMove, 220);
+      }
+    }
+
+    function newGame() {
+      cells = Array(9).fill(null);
+      turn = "X";
+      gameOver = false;
+      setStatus("Turno de X");
+      renderBoard();
+      if (modeEl.value === "cpu" && turn === "O") setTimeout(aiMove, 220);
+    }
+
+    modeEl.addEventListener("change", newGame);
+    newBtn.addEventListener("click", newGame);
+    resetScoreBtn.addEventListener("click", () => {
+      score.X = 0;
+      score.O = 0;
+      score.D = 0;
+      renderScore();
+      newGame();
+    });
+
+    renderScore();
+    newGame();
+  </script>
+</body>
+</html>
+
